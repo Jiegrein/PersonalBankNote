@@ -1,0 +1,26 @@
+name: pbn-dev
+
+services:
+  app:
+    container_name: pbn-frontend-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+      - /app/node_modules
+      - /app/.next
+    restart: unless-stopped
+
+volumes:
+  node_modules:
+  next_cache:

@@ -1,0 +1,64 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Bank {
+  id           String        @id @default(cuid())
+  name         String
+  emailFilter  String
+  statementDay Int
+  color        String        @default("#3B82F6")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+}
+
+model Transaction {
+  id         String   @id @default(cuid())
+  bankId     String
+  bank       Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  emailId    String?
+  rawContent String
+  amount     Float
+  currency   String
+  idrAmount  Float?
+  merchant   String
+  category   String
+  date       DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([bankId])
+  @@index([date])
+}
+
+model Rule {
+  id             String @id @default(cuid())
+  condition      String // "contains", "startsWith", "endsWith", "equals"
+  conditionValue String
+  category       String
+  priority       Int    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#6B7280")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  bankId    String
+  syncedAt  DateTime @default(now())
+  emailCount Int
+}
