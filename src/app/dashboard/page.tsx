@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [total, setTotal] = useState(0)
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<Array<{ name: string; color: string }>>([])
   const [bankInstallments, setBankInstallments] = useState<InstallmentInfo[]>([])
 
   const selectedBank = viewMode !== 'budget' ? banks.find(b => b.id === viewMode) : null
@@ -812,7 +812,7 @@ function BankBreakdownView({
   total: number
   bankName: string
   bankType: string
-  categories: string[]
+  categories: Array<{ name: string; color: string }>
   activeInstallments: InstallmentInfo[]
   onCategoryChange: (transactionIds: string[], newCategory: string) => Promise<void>
   onInstallmentChange: (transactionId: string, terms: number | null) => Promise<void>
@@ -938,7 +938,10 @@ function BankBreakdownView({
                       dataKey="value"
                     >
                       {chartData.map((entry, index) => (
-                        <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                        <Cell
+                          key={entry.name}
+                          fill={categories.find(c => c.name === entry.name)?.color || COLORS[index % COLORS.length]}
+                        />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
@@ -952,7 +955,7 @@ function BankBreakdownView({
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        style={{ backgroundColor: categories.find(c => c.name === item.name)?.color || COLORS[index % COLORS.length] }}
                       />
                       <span>{item.name}</span>
                     </div>
@@ -1067,14 +1070,15 @@ function BankBreakdownView({
                           <div ref={inlineDropdownRef} className="absolute z-10 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[140px]">
                             {categories.map(cat => (
                               <button
-                                key={cat}
-                                onClick={() => handleSingleCategoryChange(tx.id, cat)}
+                                key={cat.name}
+                                onClick={() => handleSingleCategoryChange(tx.id, cat.name)}
                                 disabled={updating}
-                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 flex items-center justify-between
-                                  ${cat === tx.category ? 'text-green-400' : 'text-gray-300'}`}
+                                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 flex items-center gap-2
+                                  ${cat.name === tx.category ? 'text-green-400' : 'text-gray-300'}`}
                               >
-                                {cat}
-                                {cat === tx.category && <Check className="w-3 h-3" />}
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+                                <span className="flex-1">{cat.name}</span>
+                                {cat.name === tx.category && <Check className="w-3 h-3" />}
                               </button>
                             ))}
                           </div>
@@ -1082,8 +1086,12 @@ function BankBreakdownView({
                           <button
                             onClick={() => setEditingId(tx.id)}
                             className="bg-gray-700/50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md text-xs
-                                       hover:bg-gray-600/50 transition-colors flex items-center gap-1"
+                                       hover:bg-gray-600/50 transition-colors flex items-center gap-1.5"
                           >
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: categories.find(c => c.name === tx.category)?.color || '#6B7280' }}
+                            />
                             {tx.category}
                             <ChevronDown className="w-3 h-3 text-gray-500" />
                           </button>
@@ -1173,12 +1181,13 @@ function BankBreakdownView({
                 >
                   {categories.map(cat => (
                     <button
-                      key={cat}
-                      onClick={() => handleBulkCategoryChange(cat)}
+                      key={cat.name}
+                      onClick={() => handleBulkCategoryChange(cat.name)}
                       disabled={updating}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 text-gray-300"
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 text-gray-300 flex items-center gap-2"
                     >
-                      {cat}
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                      {cat.name}
                     </button>
                   ))}
                 </div>

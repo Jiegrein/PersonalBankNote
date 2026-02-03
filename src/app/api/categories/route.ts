@@ -2,13 +2,18 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { successResponse, errorResponse } from '@/lib/api-utils'
 
-// GET /api/categories - Get all unique categories
+// GET /api/categories - Get all unique categories with colors
 export async function GET() {
   try {
-    // Get standalone categories from Category table
+    // Get standalone categories from Category table with colors
     const standaloneCategories = await prisma.category.findMany({
-      select: { name: true },
+      select: { name: true, color: true },
     })
+
+    // Create a map of category name to color
+    const categoryColorMap = new Map(
+      standaloneCategories.map(c => [c.name, c.color])
+    )
 
     // Get categories from transactions
     const transactionCategories = await prisma.transaction.findMany({
@@ -22,15 +27,21 @@ export async function GET() {
       distinct: ['category'],
     })
 
-    // Combine and dedupe
-    const allCategories = new Set([
+    // Combine and dedupe all category names
+    const allCategoryNames = new Set([
       ...standaloneCategories.map(c => c.name),
       ...transactionCategories.map(t => t.category),
       ...ruleCategories.map(r => r.category),
     ])
 
-    // Sort alphabetically
-    const categories = Array.from(allCategories).sort()
+    // Build categories with colors (use saved color or default)
+    const defaultColor = '#6B7280'
+    const categories = Array.from(allCategoryNames)
+      .sort()
+      .map(name => ({
+        name,
+        color: categoryColorMap.get(name) || defaultColor,
+      }))
 
     return successResponse(categories)
   } catch (error) {
