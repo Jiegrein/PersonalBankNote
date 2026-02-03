@@ -147,24 +147,38 @@ export default function DashboardPage() {
     }
   }
 
-  async function fetchBankData() {
+  async function fetchBankData(checkOffset: number = monthOffset, isAutoFallback: boolean = false) {
     if (!selectedBank) return
 
     setLoading(true)
     try {
-      const period = getBillingPeriod(selectedBank.statementDay, monthOffset, referenceDate)
+      const period = getBillingPeriod(selectedBank.statementDay, checkOffset, referenceDate)
       const params = new URLSearchParams({
         bankId: selectedBank.id,
         startDate: period.startDate.toISOString(),
         endDate: period.endDate.toISOString(),
-        monthOffset: String(monthOffset),
+        monthOffset: String(checkOffset),
       })
 
       const res = await fetch(`/api/transactions?${params}`)
       const data = await res.json()
 
       if (res.ok && data) {
-        setTransactions(Array.isArray(data.transactions) ? data.transactions : [])
+        const txList = Array.isArray(data.transactions) ? data.transactions : []
+
+        // If no transactions and this is initial load (offset 0), try previous month
+        if (txList.length === 0 && checkOffset === 0 && !isAutoFallback) {
+          setLoading(false)
+          fetchBankData(-1, true)
+          return
+        }
+
+        // If we auto-fell back to previous month, update the offset
+        if (isAutoFallback && txList.length > 0) {
+          setMonthOffset(checkOffset)
+        }
+
+        setTransactions(txList)
         setChartData(Array.isArray(data.chartData) ? data.chartData : [])
         setTotal(data.total || 0)
         setBankInstallments(Array.isArray(data.activeInstallments) ? data.activeInstallments : [])
