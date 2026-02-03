@@ -44,3 +44,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return errorResponse('Failed to update transaction')
   }
 }
+
+// DELETE /api/transactions/[id] - Delete a transaction
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = await params
+
+    await prisma.transaction.delete({
+      where: { id },
+    })
+
+    return successResponse({ success: true })
+  } catch (error) {
+    console.error('Failed to delete transaction:', error)
+    return errorResponse('Failed to delete transaction')
+  }
+}
