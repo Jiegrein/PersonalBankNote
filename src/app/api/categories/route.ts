@@ -50,7 +50,7 @@ export async function GET() {
   }
 }
 
-// POST /api/categories - Create a standalone category
+// POST /api/categories - Create or update a category (upsert)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -60,17 +60,11 @@ export async function POST(request: NextRequest) {
       return errorResponse('Category name is required', 400)
     }
 
-    // Check if already exists
-    const existing = await prisma.category.findUnique({
+    // Upsert - create if not exists, update if exists
+    const category = await prisma.category.upsert({
       where: { name },
-    })
-
-    if (existing) {
-      return errorResponse('Category already exists', 400)
-    }
-
-    const category = await prisma.category.create({
-      data: {
+      update: { color: color || '#6B7280' },
+      create: {
         name,
         color: color || '#6B7280',
       },
@@ -78,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     return successResponse(category, 201)
   } catch (error) {
-    console.error('Failed to create category:', error)
-    return errorResponse('Failed to create category')
+    console.error('Failed to create/update category:', error)
+    return errorResponse('Failed to create/update category')
   }
 }
