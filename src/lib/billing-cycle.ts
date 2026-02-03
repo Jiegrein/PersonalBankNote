@@ -8,14 +8,16 @@ export function getBillingPeriod(statementDay: number, monthOffset: number = 0, 
   const now = referenceDate || new Date()
   const currentDay = now.getDate()
 
-  // Determine the base month
-  let year = now.getFullYear()
-  let month = now.getMonth() + monthOffset
-
-  // If we're before the statement day, we're in the previous period
-  if (currentDay < statementDay && monthOffset === 0) {
-    month -= 1
+  // First determine the base period (what period are we in today?)
+  let baseMonth = now.getMonth()
+  if (currentDay < statementDay) {
+    // We're before the statement day, so we're still in the previous month's period
+    baseMonth -= 1
   }
+
+  // Then apply the offset to navigate months
+  let year = now.getFullYear()
+  let month = baseMonth + monthOffset
 
   // Handle year rollover
   while (month < 0) {
