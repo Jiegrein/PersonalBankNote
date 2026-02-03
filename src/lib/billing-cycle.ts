@@ -4,8 +4,8 @@ export interface BillingPeriod {
   endDate: Date
 }
 
-export function getBillingPeriod(statementDay: number, monthOffset: number = 0): BillingPeriod {
-  const now = new Date()
+export function getBillingPeriod(statementDay: number, monthOffset: number = 0, referenceDate?: Date): BillingPeriod {
+  const now = referenceDate || new Date()
   const currentDay = now.getDate()
 
   // Determine the base month

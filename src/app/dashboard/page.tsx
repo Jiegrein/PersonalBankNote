@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('budget')
   const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [referenceDate] = useState(() => new Date()) // Capture client's current date on mount
   const [showBankModal, setShowBankModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
 
@@ -151,7 +152,7 @@ export default function DashboardPage() {
 
     setLoading(true)
     try {
-      const period = getBillingPeriod(selectedBank.statementDay, monthOffset)
+      const period = getBillingPeriod(selectedBank.statementDay, monthOffset, referenceDate)
       const params = new URLSearchParams({
         bankId: selectedBank.id,
         startDate: period.startDate.toISOString(),
@@ -275,7 +276,7 @@ export default function DashboardPage() {
   const periodLabel = viewMode === 'budget'
     ? budgetData?.period.label || 'Loading...'
     : selectedBank
-      ? getBillingPeriod(selectedBank.statementDay, monthOffset).label
+      ? getBillingPeriod(selectedBank.statementDay, monthOffset, referenceDate).label
       : 'Select bank'
 
   return (
