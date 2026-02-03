@@ -78,6 +78,18 @@ function extractBCAMerchant(text: string): string {
 export function parseBCADebit(content: string): ParsedTransaction {
   const text = decodeHtmlEntities(content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))
 
+  // Check for failed transaction status - skip these
+  const statusMatch = text.match(/Status\s*:\s*(\w+)/i)
+  if (statusMatch && statusMatch[1].toLowerCase() === 'failed') {
+    return {
+      amount: 0,
+      currency: 'IDR',
+      idrAmount: 0,
+      merchant: 'FAILED_TRANSACTION',
+      transactionType: 'Failed',
+    }
+  }
+
   const merchant = extractBCAMerchant(text)
   const currency = 'IDR'
 

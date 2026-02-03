@@ -124,6 +124,8 @@ async function handlePreview(
         rawContent: email.content,
       }
     })
+    // Filter out failed transactions (BCA debit with Status: Failed)
+    .filter(tx => tx.transactionType !== 'Failed' && tx.merchant !== 'FAILED_TRANSACTION')
 
   return NextResponse.json({
     success: true,
