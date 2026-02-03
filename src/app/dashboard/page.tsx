@@ -40,8 +40,22 @@ import { BankSelectionModal } from '@/components/BankSelectionModal'
 import { SalarySettingsModal } from '@/components/SalarySettingsModal'
 import type { SalaryDashboardData, InstallmentInfo } from '@/types'
 
-const MAX_VISIBLE_BANKS = 3
+const MAX_VISIBLE_BANKS_MOBILE = 3
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280']
+
+// Hook to detect if on mobile
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  return isMobile
+}
 
 interface Transaction {
   id: string
@@ -67,6 +81,7 @@ type ViewMode = 'budget' | string // 'budget' or bankId
 export default function DashboardPage() {
   const { data: session } = useSession()
   const { banks } = useBankContext()
+  const isMobile = useIsMobile()
   const [viewMode, setViewMode] = useState<ViewMode>('budget')
   const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -253,8 +268,8 @@ export default function DashboardPage() {
     )
   }
 
-  const visibleBanks = banks.slice(0, MAX_VISIBLE_BANKS)
-  const hasMoreBanks = banks.length > MAX_VISIBLE_BANKS
+  const visibleBanks = isMobile ? banks.slice(0, MAX_VISIBLE_BANKS_MOBILE) : banks
+  const hasMoreBanks = isMobile && banks.length > MAX_VISIBLE_BANKS_MOBILE
 
   // Get period label
   const periodLabel = viewMode === 'budget'
@@ -329,7 +344,7 @@ export default function DashboardPage() {
                            transition-all duration-200 flex-shrink-0"
               >
                 <MoreHorizontal className="w-4 h-4" />
-                <span>More ({banks.length - MAX_VISIBLE_BANKS})</span>
+                <span>More ({banks.length - MAX_VISIBLE_BANKS_MOBILE})</span>
               </button>
             )}
           </div>
@@ -984,7 +999,7 @@ function BankBreakdownView({
 
       {/* Table Section */}
       <div className="lg:flex-1 min-w-0">
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 md:p-5">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 md:p-5 overflow-visible">
           <div className="flex items-center justify-between mb-3 md:mb-4">
             <h2 className="text-xs md:text-sm font-medium text-gray-400">
               Transactions ({transactions.length})
@@ -996,7 +1011,7 @@ function BankBreakdownView({
               <p className="text-gray-500">No transactions in this period</p>
             </div>
           ) : (
-            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="overflow-x-auto overflow-y-visible -mx-4 px-4 md:mx-0 md:px-0">
               <table className="w-full text-xs md:text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 text-xs uppercase tracking-wider">
