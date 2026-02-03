@@ -9,9 +9,10 @@ export function getBillingPeriod(statementDay: number, monthOffset: number = 0, 
   const currentDay = now.getDate()
 
   // First determine the base period (what period are we in today?)
+  // On statement day itself, show the period that just ended (more useful to see completed statement)
   let baseMonth = now.getMonth()
-  if (currentDay < statementDay) {
-    // We're before the statement day, so we're still in the previous month's period
+  if (currentDay <= statementDay) {
+    // We're on or before the statement day, show the previous month's period
     baseMonth -= 1
   }
 
