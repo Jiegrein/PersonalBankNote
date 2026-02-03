@@ -5,13 +5,7 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Plus, RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import SyncPreviewModal from '@/components/SyncPreviewModal'
-
-const PARSER_OPTIONS = [
-  { value: 'bca-debit', label: 'BCA Debit (myBCA)' },
-  { value: 'bca-credit', label: 'BCA Credit Card' },
-  { value: 'jenius', label: 'Jenius SMBC' },
-  { value: 'generic', label: 'Generic' },
-] as const
+import { PARSER_OPTIONS } from '@/lib/parsers'
 
 interface Bank {
   id: string
