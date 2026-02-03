@@ -78,9 +78,10 @@ function extractBCAMerchant(text: string): string {
 export function parseBCADebit(content: string): ParsedTransaction {
   const text = decodeHtmlEntities(content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))
 
-  // Check for failed transaction status - skip these
+  // Check for failed DANA/ESPAY transactions specifically - skip these
   const statusMatch = text.match(/Status\s*:\s*(\w+)/i)
-  if (statusMatch && statusMatch[1].toLowerCase() === 'failed') {
+  const isDanaEspay = text.includes('PT ESPAY DEBIT INDONESIA') || text.includes('DANA')
+  if (statusMatch && statusMatch[1].toLowerCase() === 'failed' && isDanaEspay) {
     return {
       amount: 0,
       currency: 'IDR',
