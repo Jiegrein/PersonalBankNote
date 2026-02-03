@@ -8,7 +8,7 @@ import {
   Building2,
   Tags,
   LogOut,
-  Wallet
+  Wallet,
 } from 'lucide-react'
 
 const navItems = [

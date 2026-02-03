@@ -39,8 +39,9 @@ export function getBillingPeriod(statementDay: number, monthOffset: number = 0):
   }
   const endDate = new Date(endYear, endMonth, statementDay - 1, 23, 59, 59)
 
-  // Format label (e.g., "October 2024")
-  const label = startDate.toLocaleDateString('en-US', {
+  // Format label by end date month (when statement is received)
+  // e.g., Dec 21 - Jan 20 → "January 2026" (statement received in January)
+  const label = endDate.toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })

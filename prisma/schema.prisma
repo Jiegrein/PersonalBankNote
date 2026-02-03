@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,37 +13,43 @@ model Bank {
   name         String
   emailFilter  String
   statementDay Int
+  dueDay       Int?          // Due day for credit cards (1-31), null for debit
+  bankType     String        @default("debit") // "debit" or "credit"
   color        String        @default("#3B82F6")
+  parserType   String        @default("generic")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   transactions Transaction[]
 }
 
 model Transaction {
-  id         String   @id @default(cuid())
-  bankId     String
-  bank       Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
-  emailId    String?
-  rawContent String
-  amount     Float
-  currency   String
-  idrAmount  Float?
-  merchant   String
-  category   String
-  date       DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String   @id @default(cuid())
+  bankId           String
+  bank             Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  emailId          String?
+  rawContent       String
+  transactionType  String   @default("Unknown")
+  amount           Float
+  currency         String
+  idrAmount        Float?
+  merchant         String
+  category         String
+  date             DateTime
+  installmentTerms Int?     // null or 1 = full payment, 3/6/12/24 = installment terms
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([bankId])
   @@index([date])
 }
 
 model Rule {
-  id             String @id @default(cuid())
-  condition      String // "contains", "startsWith", "endsWith", "equals"
+  id             String  @id @default(cuid())
+  condition      String  // "contains", "startsWith", "endsWith", "equals"
   conditionValue String
   category       String
-  priority       Int    @default(0)
+  priority       Int     @default(0)
+  bankType       String? // null = all banks, "debit" or "credit" = specific type only
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -61,4 +67,12 @@ model SyncLog {
   bankId    String
   syncedAt  DateTime @default(now())
   emailCount Int
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

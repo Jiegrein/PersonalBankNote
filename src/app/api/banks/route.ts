@@ -1,5 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { successResponse, errorResponse, validateEmail, validateStatementDay } from '@/lib/api-utils'
+import { CONFIG } from '@/lib/constants'
+import { PARSER_OPTIONS } from '@/lib/parsers'
 
 // GET /api/banks - Get all banks
 export async function GET() {
@@ -7,13 +10,10 @@ export async function GET() {
     const banks = await prisma.bank.findMany({
       orderBy: { name: 'asc' },
     })
-    return NextResponse.json(banks)
+    return successResponse(banks)
   } catch (error) {
     console.error('Failed to fetch banks:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch banks' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch banks')
   }
 }
 
@@ -21,46 +21,49 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, emailFilter, statementDay, color } = body
+    const { name, emailFilter, statementDay, dueDay, color, parserType, bankType } = body
 
-    // Validation
     if (!name || !emailFilter || !statementDay) {
-      return NextResponse.json(
-        { error: 'Missing required fields: name, emailFilter, statementDay' },
-        { status: 400 }
-      )
+      return errorResponse('Missing required fields: name, emailFilter, statementDay', 400)
     }
 
-    if (statementDay < 1 || statementDay > 31) {
-      return NextResponse.json(
-        { error: 'Statement day must be between 1 and 31' },
-        { status: 400 }
-      )
+    if (!validateStatementDay(statementDay)) {
+      return errorResponse('Statement day must be between 1 and 31', 400)
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailFilter)) {
-      return NextResponse.json(
-        { error: 'Invalid email filter format' },
-        { status: 400 }
-      )
+    if (dueDay !== undefined && dueDay !== null && !validateStatementDay(dueDay)) {
+      return errorResponse('Due day must be between 1 and 31', 400)
     }
+
+    if (!validateEmail(emailFilter)) {
+      return errorResponse('Invalid email filter format', 400)
+    }
+
+    const validParserTypes = PARSER_OPTIONS.map(p => p.value)
+    const resolvedParserType = parserType && validParserTypes.includes(parserType)
+      ? parserType
+      : 'generic'
+
+    const validBankTypes = ['debit', 'credit']
+    const resolvedBankType = bankType && validBankTypes.includes(bankType)
+      ? bankType
+      : 'debit'
 
     const bank = await prisma.bank.create({
       data: {
         name,
         emailFilter,
         statementDay,
-        color: color || '#3B82F6',
+        dueDay: resolvedBankType === 'credit' ? (dueDay || null) : null,
+        bankType: resolvedBankType,
+        color: color || CONFIG.UI.CHART_COLORS[0],
+        parserType: resolvedParserType,
       },
     })
 
-    return NextResponse.json(bank, { status: 201 })
+    return successResponse(bank, 201)
   } catch (error) {
     console.error('Failed to create bank:', error)
-    return NextResponse.json(
-      { error: 'Failed to create bank' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to create bank')
   }
 }

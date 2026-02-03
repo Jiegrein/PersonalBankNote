@@ -16,17 +16,6 @@ interface GraphEmailResponse {
   from?: { emailAddress: { address: string } }
 }
 
-export function buildEmailFilterQuery(emailFilter: string, since?: Date): string {
-  let filter = `from/emailAddress/address eq '${emailFilter}'`
-
-  if (since) {
-    const isoDate = since.toISOString()
-    filter += ` and receivedDateTime ge ${isoDate}`
-  }
-
-  return filter
-}
-
 export function parseEmailResponse(email: GraphEmailResponse): EmailMessage {
   return {
     id: email.id,
@@ -41,13 +30,19 @@ export async function fetchEmails(
   accessToken: string,
   emailFilter: string,
   since?: Date,
-  top: number = 50
+  top: number = 200
 ): Promise<EmailMessage[]> {
-  const filter = buildEmailFilterQuery(emailFilter, since)
-
   const url = new URL(`${GRAPH_BASE_URL}/me/messages`)
-  url.searchParams.set('$filter', filter)
-  url.searchParams.set('$orderby', 'receivedDateTime desc')
+
+  // Build search query with sender and date range
+  let searchQuery = `from:${emailFilter}`
+  if (since) {
+    // Add date filter to search query (received >= since)
+    const sinceStr = since.toISOString().split('T')[0]
+    searchQuery += ` received>=${sinceStr}`
+  }
+
+  url.searchParams.set('$search', `"${searchQuery}"`)
   url.searchParams.set('$top', top.toString())
   url.searchParams.set('$select', 'id,subject,body,receivedDateTime,from')
 
@@ -66,7 +61,19 @@ export async function fetchEmails(
   const data = await response.json()
   const emails: GraphEmailResponse[] = data.value || []
 
-  return emails.map(parseEmailResponse)
+  // Subjects to exclude (billing statements, reminders, failed transactions, etc.)
+  const excludedSubjectPatterns = [
+    /billing statement/i,
+    /due in \d+ days/i,
+    /unsuccessful/i,
+  ]
+
+  // Filter client-side for exact sender match (Graph search is fuzzy)
+  return emails
+    .map(parseEmailResponse)
+    .filter(email => email.from.toLowerCase() === emailFilter.toLowerCase())
+    .filter(email => !excludedSubjectPatterns.some(pattern => pattern.test(email.subject)))
+    .sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime())
 }
 
 export async function fetchEmailById(

@@ -4,20 +4,37 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Plus, RefreshCw, Pencil, Trash2, X } from 'lucide-react'
+import SyncPreviewModal from '@/components/SyncPreviewModal'
+
+const PARSER_OPTIONS = [
+  { value: 'bca-debit', label: 'BCA Debit (myBCA)' },
+  { value: 'bca-credit', label: 'BCA Credit Card' },
+  { value: 'jenius', label: 'Jenius SMBC' },
+  { value: 'generic', label: 'Generic' },
+] as const
 
 interface Bank {
   id: string
   name: string
   emailFilter: string
   statementDay: number
+  dueDay: number | null
+  bankType: string
   color: string
+  parserType: string
+}
+
+interface PreviewModalState {
+  isOpen: boolean
+  bankId: string
+  bankName: string
 }
 
 export default function BanksPage() {
   const { data: session } = useSession()
   const [banks, setBanks] = useState<Bank[]>([])
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState<string | null>(null)
+  const [previewModal, setPreviewModal] = useState<PreviewModalState | null>(null)
 
   // Form state
   const [showForm, setShowForm] = useState(false)
@@ -25,7 +42,10 @@ export default function BanksPage() {
     name: '',
     emailFilter: '',
     statementDay: 1,
+    dueDay: null as number | null,
+    bankType: 'debit',
     color: '#3B82F6',
+    parserType: 'generic',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
 
@@ -87,30 +107,19 @@ export default function BanksPage() {
     }
   }
 
-  // Sync emails
-  async function handleSync(bankId: string) {
-    setSyncing(bankId)
+  // Open sync preview modal
+  function handleSync(bankId: string, bankName: string) {
+    setPreviewModal({ isOpen: true, bankId, bankName })
+  }
 
-    try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bankId }),
-      })
+  // Handle import completion
+  function handleImportComplete(count: number) {
+    alert(`Successfully imported ${count} transaction${count !== 1 ? 's' : ''}.`)
+  }
 
-      const data = await res.json()
-
-      if (res.ok) {
-        alert(`Synced! Found ${data.emailsFound} emails, ${data.newTransactions} new.`)
-      } else {
-        alert(`Sync failed: ${data.error}`)
-      }
-    } catch (error) {
-      console.error('Sync failed:', error)
-      alert('Sync failed')
-    } finally {
-      setSyncing(null)
-    }
+  // Close preview modal
+  function closePreviewModal() {
+    setPreviewModal(null)
   }
 
   // Edit bank
@@ -119,7 +128,10 @@ export default function BanksPage() {
       name: bank.name,
       emailFilter: bank.emailFilter,
       statementDay: bank.statementDay,
+      dueDay: bank.dueDay,
+      bankType: bank.bankType || 'debit',
       color: bank.color,
+      parserType: bank.parserType || 'generic',
     })
     setEditingId(bank.id)
     setShowForm(true)
@@ -127,7 +139,7 @@ export default function BanksPage() {
 
   // Reset form
   function resetForm() {
-    setFormData({ name: '', emailFilter: '', statementDay: 1, color: '#3B82F6' })
+    setFormData({ name: '', emailFilter: '', statementDay: 1, dueDay: null, bankType: 'debit', color: '#3B82F6', parserType: 'generic' })
     setEditingId(null)
     setShowForm(false)
   }
@@ -188,6 +200,17 @@ export default function BanksPage() {
               />
             </div>
             <div>
+              <label className="block text-sm text-gray-400 mb-1">Bank Type</label>
+              <select
+                value={formData.bankType}
+                onChange={(e) => setFormData({ ...formData, bankType: e.target.value, dueDay: e.target.value === 'credit' ? formData.dueDay : null })}
+                className="w-full bg-gray-700 rounded px-3 py-2"
+              >
+                <option value="debit">Debit</option>
+                <option value="credit">Credit Card</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-sm text-gray-400 mb-1">Statement Day (1-31)</label>
               <input
                 type="number"
@@ -199,6 +222,20 @@ export default function BanksPage() {
                 required
               />
             </div>
+            {formData.bankType === 'credit' && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Due Day (1-31)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={formData.dueDay || ''}
+                  onChange={(e) => setFormData({ ...formData, dueDay: e.target.value ? parseInt(e.target.value) : null })}
+                  className="w-full bg-gray-700 rounded px-3 py-2"
+                  placeholder="e.g., 5"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm text-gray-400 mb-1">Color</label>
               <input
@@ -207,6 +244,20 @@ export default function BanksPage() {
                 onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                 className="w-full h-10 bg-gray-700 rounded"
               />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm text-gray-400 mb-1">Parser Type</label>
+              <select
+                value={formData.parserType}
+                onChange={(e) => setFormData({ ...formData, parserType: e.target.value })}
+                className="w-full bg-gray-700 rounded px-3 py-2"
+              >
+                {PARSER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="mt-4 flex justify-end space-x-2">
@@ -250,20 +301,30 @@ export default function BanksPage() {
                     style={{ backgroundColor: bank.color }}
                   />
                   <div>
-                    <h3 className="font-medium">{bank.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{bank.name}</h3>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        bank.bankType === 'credit'
+                          ? 'bg-purple-400/10 text-purple-400'
+                          : 'bg-green-400/10 text-green-400'
+                      }`}>
+                        {bank.bankType === 'credit' ? 'Credit' : 'Debit'}
+                      </span>
+                    </div>
                     <p className="text-sm text-gray-500">
-                      {bank.emailFilter} • Day {bank.statementDay}
+                      {bank.emailFilter} • Statement {bank.statementDay}
+                      {bank.bankType === 'credit' && bank.dueDay && ` • Due ${bank.dueDay}`}
+                      {' • '}{PARSER_OPTIONS.find(p => p.value === bank.parserType)?.label || 'Generic'}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleSync(bank.id)}
-                    disabled={syncing === bank.id}
+                    onClick={() => handleSync(bank.id, bank.name)}
                     className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700
-                               px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 transition-colors"
+                               px-3 py-1.5 rounded-lg text-sm transition-colors"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncing === bank.id ? 'animate-spin' : ''}`} />
+                    <RefreshCw className="w-3.5 h-3.5" />
                     Sync
                   </button>
                   <button
@@ -284,6 +345,17 @@ export default function BanksPage() {
           </div>
         )}
       </div>
+
+      {/* Sync Preview Modal */}
+      {previewModal && (
+        <SyncPreviewModal
+          isOpen={previewModal.isOpen}
+          bankId={previewModal.bankId}
+          bankName={previewModal.bankName}
+          onClose={closePreviewModal}
+          onImportComplete={handleImportComplete}
+        />
+      )}
     </div>
   )
 }

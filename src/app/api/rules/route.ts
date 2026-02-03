@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { successResponse, errorResponse, validateRuleCondition } from '@/lib/api-utils'
 
 // GET /api/rules - Get all rules
 export async function GET() {
@@ -7,13 +8,10 @@ export async function GET() {
     const rules = await prisma.rule.findMany({
       orderBy: { priority: 'desc' },
     })
-    return NextResponse.json(rules)
+    return successResponse(rules)
   } catch (error) {
     console.error('Failed to fetch rules:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch rules' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch rules')
   }
 }
 
@@ -21,22 +19,19 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { condition, conditionValue, category, priority } = body
+    const { condition, conditionValue, category, priority, bankType } = body
 
     if (!condition || !conditionValue || !category) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return errorResponse('Missing required fields', 400)
     }
 
-    const validConditions = ['contains', 'startsWith', 'endsWith', 'equals']
-    if (!validConditions.includes(condition)) {
-      return NextResponse.json(
-        { error: 'Invalid condition type' },
-        { status: 400 }
-      )
+    if (!validateRuleCondition(condition)) {
+      return errorResponse('Invalid condition type', 400)
     }
+
+    // Validate bankType if provided
+    const validBankTypes = ['debit', 'credit']
+    const resolvedBankType = bankType && validBankTypes.includes(bankType) ? bankType : null
 
     const rule = await prisma.rule.create({
       data: {
@@ -44,15 +39,13 @@ export async function POST(request: NextRequest) {
         conditionValue,
         category,
         priority: priority || 0,
+        bankType: resolvedBankType,
       },
     })
 
-    return NextResponse.json(rule, { status: 201 })
+    return successResponse(rule, 201)
   } catch (error) {
     console.error('Failed to create rule:', error)
-    return NextResponse.json(
-      { error: 'Failed to create rule' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to create rule')
   }
 }

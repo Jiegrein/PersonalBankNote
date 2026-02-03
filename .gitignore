@@ -21,6 +21,7 @@
 npm-debug.log*
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -30,3 +31,10 @@ next-env.d.ts
 # prisma
 /prisma/*.db
 /prisma/*.db-journal
+/prisma/prisma/
+
+# backup files
+*.bak
+
+# claude code local settings
+.claude/settings.local.json

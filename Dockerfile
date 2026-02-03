@@ -57,8 +57,8 @@ COPY prisma ./prisma
 # Generate Prisma client
 RUN npx prisma generate
 
-# Copy remaining source code
-COPY . .
+# Don't copy source code - it will be mounted via docker-compose volumes
+# This prevents file timestamp conflicts that cause restart loops
 
 # Expose port
 EXPOSE 3000

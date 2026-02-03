@@ -13,10 +13,18 @@ services:
       - .env.local
     environment:
       - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./src:/app/src
       - ./public:/app/public
       - ./prisma:/app/prisma
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./next.config.js:/app/next.config.js
+      - ./tailwind.config.ts:/app/tailwind.config.ts
+      - ./postcss.config.js:/app/postcss.config.js
+      - ./jest.config.js:/app/jest.config.js
+      - ./jest.setup.js:/app/jest.setup.js
       - /app/node_modules
       - /app/.next
     restart: unless-stopped

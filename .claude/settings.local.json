@@ -4,7 +4,15 @@
       "Bash(docker-compose logs:*)",
       "WebSearch",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nUpdate to November 2025 LTS versions and fix runtime errors\n\n- Node.js 22, Next.js 16, React 19, Prisma 6.19, TS 5.9\n- Fix Prisma Alpine/OpenSSL compatibility\n- Add defensive API error handling\n- Move DATABASE_URL to environment variable\nEOF\n)\")"
+      "Bash(git commit -m \"$(cat <<''EOF''\nUpdate to November 2025 LTS versions and fix runtime errors\n\n- Node.js 22, Next.js 16, React 19, Prisma 6.19, TS 5.9\n- Fix Prisma Alpine/OpenSSL compatibility\n- Add defensive API error handling\n- Move DATABASE_URL to environment variable\nEOF\n)\")",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(xargs cat:*)"
     ],
     "deny": [],
     "ask": []

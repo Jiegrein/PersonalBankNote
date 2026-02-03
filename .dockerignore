@@ -1,5 +1,8 @@
 node_modules
 .next
+.next/cache
 .git
 *.log
 .env*.local
+*.tsbuildinfo
+next-env.d.ts
