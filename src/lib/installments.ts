@@ -30,7 +30,8 @@ export function getMonthlyAmount(totalAmount: number, terms: number): number {
 export function getInstallmentNumber(
   transactionDate: Date,
   statementDay: number,
-  viewMonthOffset: number
+  viewMonthOffset: number,
+  referenceDate?: Date
 ): number {
   // Get the billing period for the transaction date
   const txDate = new Date(transactionDate)
@@ -53,7 +54,7 @@ export function getInstallmentNumber(
   }
 
   // Get the billing period we're viewing (use endDate to match statement labeling)
-  const viewPeriod = getBillingPeriod(statementDay, viewMonthOffset)
+  const viewPeriod = getBillingPeriod(statementDay, viewMonthOffset, referenceDate)
   const viewYear = viewPeriod.endDate.getFullYear()
   const viewMonth = viewPeriod.endDate.getMonth()
 
@@ -70,9 +71,10 @@ export function isInstallmentActiveForPeriod(
   transactionDate: Date,
   terms: number,
   statementDay: number,
-  viewMonthOffset: number
+  viewMonthOffset: number,
+  referenceDate?: Date
 ): boolean {
-  const installmentNum = getInstallmentNumber(transactionDate, statementDay, viewMonthOffset)
+  const installmentNum = getInstallmentNumber(transactionDate, statementDay, viewMonthOffset, referenceDate)
   return installmentNum >= 1 && installmentNum <= terms
 }
 
@@ -89,7 +91,8 @@ export function getActiveInstallments(
     installmentTerms: number | null
   }>,
   statementDay: number,
-  viewMonthOffset: number
+  viewMonthOffset: number,
+  referenceDate?: Date
 ): InstallmentInfo[] {
   const installments: InstallmentInfo[] = []
 
@@ -97,7 +100,7 @@ export function getActiveInstallments(
     const terms = tx.installmentTerms
     if (!terms || terms <= 1) continue
 
-    const installmentNum = getInstallmentNumber(tx.date, statementDay, viewMonthOffset)
+    const installmentNum = getInstallmentNumber(tx.date, statementDay, viewMonthOffset, referenceDate)
 
     if (installmentNum >= 1 && installmentNum <= terms) {
       const totalAmount = tx.idrAmount ?? tx.amount
@@ -128,13 +131,14 @@ export function getEffectiveAmount(
   terms: number | null,
   transactionDate: Date,
   statementDay: number,
-  viewMonthOffset: number
+  viewMonthOffset: number,
+  referenceDate?: Date
 ): number {
   if (!terms || terms <= 1) {
     return amount
   }
 
-  const installmentNum = getInstallmentNumber(transactionDate, statementDay, viewMonthOffset)
+  const installmentNum = getInstallmentNumber(transactionDate, statementDay, viewMonthOffset, referenceDate)
 
   if (installmentNum >= 1 && installmentNum <= terms) {
     return getMonthlyAmount(amount, terms)

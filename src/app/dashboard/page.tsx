@@ -67,6 +67,7 @@ interface Transaction {
   category: string
   date: string
   installmentTerms?: number | null
+  notes?: string | null
   bank: { name: string; color: string; bankType?: string }
 }
 
@@ -83,11 +84,20 @@ export default function DashboardPage() {
   const { banks } = useBankContext()
   const isMobile = useIsMobile()
   const [viewMode, setViewMode] = useState<ViewMode>('budget')
-  const [monthOffset, setMonthOffset] = useState(0)
+  const [monthOffsets, setMonthOffsets] = useState<Record<string, number>>({}) // Independent offset per view
   const [loading, setLoading] = useState(true)
   const [referenceDate] = useState(() => new Date()) // Capture client's current date on mount
   const [showBankModal, setShowBankModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const isInitialBankLoad = useRef(true) // Track if this is initial load for auto-fallback
+
+  // Get current month offset for the active view
+  const monthOffset = monthOffsets[viewMode] ?? 0
+
+  // Set month offset for a specific view
+  const setMonthOffset = (offset: number, view: string = viewMode) => {
+    setMonthOffsets(prev => ({ ...prev, [view]: offset }))
+  }
 
   // Budget view state
   const [budgetData, setBudgetData] = useState<SalaryDashboardData | null>(null)
@@ -97,6 +107,7 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [chartData, setChartData] = useState<ChartData[]>([])
   const [total, setTotal] = useState(0)
+  const [totalSpendingBank, setTotalSpendingBank] = useState(0)
   const [categories, setCategories] = useState<Array<{ name: string; color: string }>>([])
   const [bankInstallments, setBankInstallments] = useState<InstallmentInfo[]>([])
 
@@ -117,6 +128,13 @@ export default function DashboardPage() {
     }
     fetchCategories()
   }, [])
+
+  // Reset initial load flag when switching to a different bank
+  useEffect(() => {
+    if (viewMode !== 'budget') {
+      isInitialBankLoad.current = true
+    }
+  }, [viewMode])
 
   // Fetch data based on view mode
   useEffect(() => {
@@ -167,7 +185,9 @@ export default function DashboardPage() {
         const txList = Array.isArray(data.transactions) ? data.transactions : []
 
         // If no transactions and this is initial load (offset 0), try previous month
-        if (txList.length === 0 && checkOffset === 0 && !isAutoFallback) {
+        // Only do this on initial bank load, not when user manually navigates
+        if (txList.length === 0 && checkOffset === 0 && !isAutoFallback && isInitialBankLoad.current) {
+          isInitialBankLoad.current = false
           setLoading(false)
           fetchBankData(-1, true)
           return
@@ -178,14 +198,19 @@ export default function DashboardPage() {
           setMonthOffset(checkOffset)
         }
 
+        // Mark initial load as complete
+        isInitialBankLoad.current = false
+
         setTransactions(txList)
         setChartData(Array.isArray(data.chartData) ? data.chartData : [])
         setTotal(data.total || 0)
+        setTotalSpendingBank(data.totalSpending || 0)
         setBankInstallments(Array.isArray(data.activeInstallments) ? data.activeInstallments : [])
       } else {
         setTransactions([])
         setChartData([])
         setTotal(0)
+        setTotalSpendingBank(0)
         setBankInstallments([])
       }
     } catch (error) {
@@ -193,6 +218,7 @@ export default function DashboardPage() {
       setTransactions([])
       setChartData([])
       setTotal(0)
+      setTotalSpendingBank(0)
       setBankInstallments([])
     } finally {
       setLoading(false)
@@ -249,6 +275,22 @@ export default function DashboardPage() {
     )
     // Refresh to update totals
     fetchBankData()
+  }
+
+  async function handleNotesChange(transactionId: string, notes: string) {
+    const trimmedNotes = notes.slice(0, 25) || null
+    await fetch(`/api/transactions/${transactionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: trimmedNotes }),
+    })
+
+    // Update local state
+    setTransactions(prev =>
+      prev.map(tx =>
+        tx.id === transactionId ? { ...tx, notes: trimmedNotes } : tx
+      )
+    )
   }
 
   // Keyboard navigation
@@ -409,12 +451,14 @@ export default function DashboardPage() {
             transactions={transactions}
             chartData={chartData}
             total={total}
+            totalSpending={totalSpendingBank}
             bankName={selectedBank?.name || ''}
             bankType={selectedBank?.bankType || 'debit'}
             categories={categories}
             activeInstallments={bankInstallments}
             onCategoryChange={handleCategoryChange}
             onInstallmentChange={handleInstallmentChange}
+            onNotesChange={handleNotesChange}
           />
         )}
       </div>
@@ -624,7 +668,7 @@ function BudgetView({ data, error }: { data: SalaryDashboardData | null; error: 
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 space-y-2">
-                {data.categoryBreakdown.map((item, index) => (
+                {[...data.categoryBreakdown].sort((a, b) => b.percentage - a.percentage).map((item, index) => (
                   <div key={item.name} className="flex justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <div
@@ -815,36 +859,48 @@ function BankBreakdownView({
   transactions,
   chartData,
   total,
+  totalSpending,
   bankName,
   bankType,
   categories,
   activeInstallments,
   onCategoryChange,
   onInstallmentChange,
+  onNotesChange,
 }: {
   transactions: Transaction[]
   chartData: ChartData[]
   total: number
+  totalSpending?: number
   bankName: string
   bankType: string
   categories: Array<{ name: string; color: string }>
   activeInstallments: InstallmentInfo[]
   onCategoryChange: (transactionIds: string[], newCategory: string) => Promise<void>
   onInstallmentChange: (transactionId: string, terms: number | null) => Promise<void>
+  onNotesChange: (transactionId: string, notes: string) => Promise<void>
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null)
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
+  const [notesValue, setNotesValue] = useState('')
   const [updating, setUpdating] = useState(false)
   const [sortByCategory, setSortByCategory] = useState(false)
   const isCreditCard = bankType === 'credit'
 
-  // Sort transactions: by category (alpha) then by date (desc)
+  // Sort transactions: Uncategorized first, then A-Z by category, then by date (desc)
   const sortedTransactions = sortByCategory
     ? [...transactions].sort((a, b) => {
+        // Uncategorized always first
+        if (a.category === 'Uncategorized' && b.category !== 'Uncategorized') return -1
+        if (b.category === 'Uncategorized' && a.category !== 'Uncategorized') return 1
+        // Then sort alphabetically A-Z
         const catCompare = a.category.localeCompare(b.category)
         if (catCompare !== 0) return catCompare
+        // Within same category, sort by date (newest first)
         return new Date(b.date).getTime() - new Date(a.date).getTime()
       })
     : transactions
@@ -860,6 +916,7 @@ function BankBreakdownView({
       }
       if (inlineDropdownRef.current && !inlineDropdownRef.current.contains(event.target as Node)) {
         setEditingId(null)
+        setDropdownPos(null)
       }
       if (installmentDropdownRef.current && !installmentDropdownRef.current.contains(event.target as Node)) {
         setEditingInstallmentId(null)
@@ -925,6 +982,7 @@ function BankBreakdownView({
     } finally {
       setUpdating(false)
       setEditingId(null)
+      setDropdownPos(null)
     }
   }
   return (
@@ -933,9 +991,22 @@ function BankBreakdownView({
       <div className="lg:w-80 lg:flex-shrink-0">
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 md:p-5">
           <h2 className="text-xs md:text-sm font-medium text-gray-400 mb-1">{bankName} Spending</h2>
-          <p className="text-2xl md:text-3xl font-bold text-green-400 mb-3 md:mb-4">
-            {formatCurrency(total)}
-          </p>
+          {totalSpending !== undefined && totalSpending !== total ? (
+            <div className="mb-3 md:mb-4">
+              <p className="text-xs text-gray-500">My Spending</p>
+              <p className="text-2xl md:text-3xl font-bold text-green-400">
+                {formatCurrency(total)}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">Total Spending (incl. Papa & Bebe)</p>
+              <p className="text-lg font-semibold text-gray-400">
+                {formatCurrency(totalSpending)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-2xl md:text-3xl font-bold text-green-400 mb-3 md:mb-4">
+              {formatCurrency(total)}
+            </p>
+          )}
 
           {chartData.length === 0 ? (
             <p className="text-gray-500 text-sm">No IDR transactions</p>
@@ -965,7 +1036,7 @@ function BankBreakdownView({
               </div>
 
               <div className="mt-4 space-y-2">
-                {chartData.map((item, index) => (
+                {[...chartData].sort((a, b) => b.percentage - a.percentage).map((item, index) => (
                   <div key={item.name} className="flex justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <div
@@ -1053,6 +1124,7 @@ function BankBreakdownView({
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </th>
+                    <th className="pb-2 md:pb-3 pr-2 font-medium hidden lg:table-cell">Notes</th>
                     {isCreditCard && (
                       <th className="pb-2 md:pb-3 pr-2 font-medium hidden md:table-cell">Terms</th>
                     )}
@@ -1080,9 +1152,13 @@ function BankBreakdownView({
                       <td className="py-2 md:py-3 pr-2 font-medium max-w-[120px] md:max-w-none truncate">
                         {tx.merchant}
                       </td>
-                      <td className="py-2 md:py-3 pr-2 hidden sm:table-cell relative">
-                        {editingId === tx.id ? (
-                          <div ref={inlineDropdownRef} className="absolute z-10 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[140px]">
+                      <td className="py-2 md:py-3 pr-2 hidden sm:table-cell">
+                        {editingId === tx.id && dropdownPos ? (
+                          <div
+                            ref={inlineDropdownRef}
+                            className="fixed z-[100] bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[140px]"
+                            style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                          >
                             {categories.map(cat => (
                               <button
                                 key={cat.name}
@@ -1097,18 +1173,56 @@ function BankBreakdownView({
                               </button>
                             ))}
                           </div>
+                        ) : null}
+                        <button
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setDropdownPos({ top: rect.bottom + 4, left: rect.left })
+                            setEditingId(tx.id)
+                          }}
+                          className="bg-gray-700/50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md text-xs
+                                     hover:bg-gray-600/50 transition-colors flex items-center gap-1.5"
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: categories.find(c => c.name === tx.category)?.color || '#6B7280' }}
+                          />
+                          {tx.category}
+                          <ChevronDown className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </td>
+                      <td className="py-2 md:py-3 pr-2 hidden lg:table-cell">
+                        {editingNotesId === tx.id ? (
+                          <input
+                            type="text"
+                            value={notesValue}
+                            onChange={(e) => setNotesValue(e.target.value.slice(0, 25))}
+                            onBlur={() => {
+                              onNotesChange(tx.id, notesValue)
+                              setEditingNotesId(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                onNotesChange(tx.id, notesValue)
+                                setEditingNotesId(null)
+                              } else if (e.key === 'Escape') {
+                                setEditingNotesId(null)
+                              }
+                            }}
+                            autoFocus
+                            maxLength={25}
+                            placeholder="Add note..."
+                            className="w-24 px-1.5 py-0.5 text-xs bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-green-500"
+                          />
                         ) : (
                           <button
-                            onClick={() => setEditingId(tx.id)}
-                            className="bg-gray-700/50 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md text-xs
-                                       hover:bg-gray-600/50 transition-colors flex items-center gap-1.5"
+                            onClick={() => {
+                              setEditingNotesId(tx.id)
+                              setNotesValue(tx.notes || '')
+                            }}
+                            className="text-xs text-gray-400 hover:text-gray-300 truncate max-w-[100px] block"
                           >
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: categories.find(c => c.name === tx.category)?.color || '#6B7280' }}
-                            />
-                            {tx.category}
-                            <ChevronDown className="w-3 h-3 text-gray-500" />
+                            {tx.notes || <span className="text-gray-600">—</span>}
                           </button>
                         )}
                       </td>

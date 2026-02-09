@@ -36,6 +36,7 @@ model Transaction {
   category         String
   date             DateTime
   installmentTerms Int?     // null or 1 = full payment, 3/6/12/24 = installment terms
+  notes            String?  @db.VarChar(25) // Short notes, max 25 chars
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

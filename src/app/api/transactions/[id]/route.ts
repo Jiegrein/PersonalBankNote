@@ -9,10 +9,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params
     const body = await request.json()
-    const { category, installmentTerms } = body
+    const { category, installmentTerms, notes } = body
 
     // Build update data
-    const updateData: { category?: string; installmentTerms?: number | null } = {}
+    const updateData: { category?: string; installmentTerms?: number | null; notes?: string | null } = {}
 
     if (category !== undefined) {
       updateData.category = category
@@ -27,6 +27,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       } else {
         return errorResponse('Invalid installment terms. Must be 1, 3, 6, 12, or 24', 400)
       }
+    }
+
+    if (notes !== undefined) {
+      // Validate and truncate notes to 25 chars
+      updateData.notes = notes ? String(notes).slice(0, 25) : null
     }
 
     if (Object.keys(updateData).length === 0) {

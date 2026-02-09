@@ -19,6 +19,22 @@ function parseIndonesianAmount(amountStr: string): number {
 export function parseKrom(content: string): ParsedTransaction {
   const text = decodeHtmlEntities(content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '))
 
+  // Check if this is a recognized transaction format
+  const isTransferOut = text.includes('mengirim dana') && text.includes('Jumlah:')
+  const isTransferIn = text.includes('menerima dana') || text.includes('Dana Masuk')
+  const isPayment = text.includes('Pembayaran Berhasil') || text.includes('QRIS')
+
+  // Skip unrecognized email formats (marketing, notifications, etc.)
+  if (!isTransferOut && !isTransferIn && !isPayment) {
+    return {
+      amount: 0,
+      currency: 'IDR',
+      idrAmount: 0,
+      merchant: 'SKIP_TRANSACTION',
+      transactionType: 'Skip',
+    }
+  }
+
   // Default values
   let amount = 0
   let merchant = 'Unknown'

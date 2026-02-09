@@ -15,10 +15,14 @@ interface Rule {
 }
 
 const CONDITIONS = [
-  { value: 'contains', label: 'Contains' },
-  { value: 'startsWith', label: 'Starts with' },
-  { value: 'endsWith', label: 'Ends with' },
-  { value: 'equals', label: 'Equals' },
+  { value: 'contains', label: 'Contains (all text)' },
+  { value: 'startsWith', label: 'Starts with (all text)' },
+  { value: 'endsWith', label: 'Ends with (all text)' },
+  { value: 'equals', label: 'Equals (all text)' },
+  { value: 'merchantContains', label: 'Merchant contains' },
+  { value: 'merchantStartsWith', label: 'Merchant starts with' },
+  { value: 'merchantEndsWith', label: 'Merchant ends with' },
+  { value: 'merchantEquals', label: 'Merchant equals' },
 ]
 
 const BANK_TYPES = [
@@ -82,7 +86,9 @@ export default function RulesPage() {
       const res = await fetch('/api/categories')
       const data = await res.json()
       if (res.ok && Array.isArray(data)) {
-        setCategories(data)
+        // Extract category names from objects
+        const categoryNames = data.map((cat: { name: string }) => cat.name)
+        setCategories(categoryNames)
       }
     } catch (error) {
       console.error('Failed to fetch categories:', error)

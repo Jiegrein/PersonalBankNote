@@ -9,9 +9,13 @@ import {
   aggregateByCategory,
   aggregateByDay,
 } from '@/lib/spending-calculations'
+import { CONFIG } from '@/lib/constants'
 
 const DEFAULT_SALARY = 30000000
-const EXCLUDED_CATEGORIES = ['Transfer', 'Credit Card Payment']
+// For "My Spending" calculations - excludes Papa, Bebe, transfers
+const MY_SPENDING_EXCLUDED: readonly string[] = CONFIG.SPENDING.MY_SPENDING_EXCLUDED
+// For CC Payment Due - only excludes transfers (includes Papa, Bebe since you pay full bill)
+const CC_PAYMENT_EXCLUDED: readonly string[] = CONFIG.SPENDING.BOTH_EXCLUDED
 
 /**
  * Check if a payment date is in the payment window for a CC
@@ -74,7 +78,11 @@ export async function GET(request: NextRequest) {
     let latestCcEnd = calendarPeriod.endDate
 
     const ccPeriods = creditBanks.map(ccBank => {
-      const period = getBillingPeriod(ccBank.statementDay, monthOffset)
+      // Use calendar month start as reference to get the CC period whose due date falls within this calendar month
+      // E.g., for February calendar month and BCA (statement day 3):
+      // - Feb 1 < statement day 3, so getBillingPeriod returns Jan 3 - Feb 2 (due Feb 19)
+      // This is the correct period for February budget since payment is due in February
+      const period = getBillingPeriod(ccBank.statementDay, monthOffset, calendarPeriod.startDate)
       if (period.startDate < earliestCcStart) earliestCcStart = period.startDate
       if (period.endDate > latestCcEnd) latestCcEnd = period.endDate
       return { bank: ccBank, period }
@@ -141,19 +149,23 @@ export async function GET(request: NextRequest) {
       const ccPaymentsFromSelf = ccTransactions.filter(tx => tx.category === 'Credit Card Payment')
 
       // Calculate effective spending (accounting for installments)
+      // ccAmount = full amount for CC Payment Due (includes Papa, Bebe)
+      // allCreditSpending = for category breakdown (excludes Papa, Bebe)
       let ccAmount = 0
       for (const tx of ccSpending) {
-        if (EXCLUDED_CATEGORIES.includes(tx.category)) continue
+        // Skip only transfers for CC Payment Due calculation
+        if (CC_PAYMENT_EXCLUDED.includes(tx.category)) continue
         processedTxIds.add(tx.id)
 
         const amount = tx.idrAmount ?? tx.amount
         const terms = tx.installmentTerms
 
         if (terms && terms > 1) {
-          // Installment: use monthly amount
-          const effectiveAmount = getEffectiveAmount(amount, terms, tx.date, statementDay, monthOffset)
+          // Installment: use monthly amount (pass calendarPeriod.startDate for consistent billing period calculation)
+          const effectiveAmount = getEffectiveAmount(amount, terms, tx.date, statementDay, monthOffset, calendarPeriod.startDate)
           ccAmount += effectiveAmount
-          if (effectiveAmount > 0) {
+          // Only add to category breakdown if not in MY_SPENDING_EXCLUDED
+          if (effectiveAmount !== 0 && !MY_SPENDING_EXCLUDED.includes(tx.category)) {
             allCreditSpending.push({
               amount: effectiveAmount,
               category: tx.category,
@@ -165,13 +177,16 @@ export async function GET(request: NextRequest) {
         } else {
           // Full payment
           ccAmount += amount
-          allCreditSpending.push({
-            amount,
-            category: tx.category,
-            bankId: tx.bankId,
-            bankName: tx.bank.name,
-            bankType: tx.bank.bankType,
-          })
+          // Only add to category breakdown if not in MY_SPENDING_EXCLUDED
+          if (!MY_SPENDING_EXCLUDED.includes(tx.category)) {
+            allCreditSpending.push({
+              amount,
+              category: tx.category,
+              bankId: tx.bankId,
+              bankName: tx.bank.name,
+              bankType: tx.bank.bankType,
+            })
+          }
         }
       }
 
@@ -179,20 +194,24 @@ export async function GET(request: NextRequest) {
       const ccInstallmentTx = installmentTransactions.filter(tx => tx.bankId === ccBank.id)
       for (const tx of ccInstallmentTx) {
         if (processedTxIds.has(tx.id)) continue
-        if (EXCLUDED_CATEGORIES.includes(tx.category)) continue
+        // Skip only transfers for CC Payment Due calculation
+        if (CC_PAYMENT_EXCLUDED.includes(tx.category)) continue
 
         const amount = tx.idrAmount ?? tx.amount
-        const effectiveAmount = getEffectiveAmount(amount, tx.installmentTerms, tx.date, statementDay, monthOffset)
+        const effectiveAmount = getEffectiveAmount(amount, tx.installmentTerms, tx.date, statementDay, monthOffset, calendarPeriod.startDate)
 
-        if (effectiveAmount > 0) {
+        if (effectiveAmount !== 0) {
           ccAmount += effectiveAmount
-          allCreditSpending.push({
-            amount: effectiveAmount,
-            category: tx.category,
-            bankId: tx.bankId,
-            bankName: tx.bank.name,
-            bankType: tx.bank.bankType,
-          })
+          // Only add to category breakdown if not in MY_SPENDING_EXCLUDED
+          if (!MY_SPENDING_EXCLUDED.includes(tx.category)) {
+            allCreditSpending.push({
+              amount: effectiveAmount,
+              category: tx.category,
+              bankId: tx.bankId,
+              bankName: tx.bank.name,
+              bankType: tx.bank.bankType,
+            })
+          }
         }
       }
 
@@ -207,7 +226,8 @@ export async function GET(request: NextRequest) {
           installmentTerms: tx.installmentTerms,
         })),
         statementDay,
-        monthOffset
+        monthOffset,
+        calendarPeriod.startDate
       )
       allInstallments.push(...ccActiveInstallments)
 
@@ -258,13 +278,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter debit transactions
-    const filteredDebitTx = debitTransactions.filter(tx => !EXCLUDED_CATEGORIES.includes(tx.category))
+    const filteredDebitTx = debitTransactions.filter(tx => !MY_SPENDING_EXCLUDED.includes(tx.category))
 
     // Calculate totals
     const debitSpending = filteredDebitTx.reduce((sum, tx) => sum + (tx.idrAmount ?? tx.amount), 0)
     const ccSpendingTotal = allCreditSpending.reduce((sum, item) => sum + item.amount, 0)
+    const ccBillTotal = ccPaymentDetails.reduce((sum, cc) => sum + cc.amount, 0)
     const ccPaymentsMadeTotal = ccPaymentsMade.reduce((sum, p) => sum + p.amount, 0)
-    const ccPaymentDue = ccSpendingTotal - ccPaymentsMadeTotal
+    const ccPaymentDue = ccBillTotal - ccPaymentsMadeTotal
     const totalSpending = debitSpending + ccSpendingTotal
     const remainingBalance = salary - totalSpending
 

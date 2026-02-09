@@ -1,4 +1,5 @@
 import { CONFIG } from './constants'
+import { getEffectiveAmount } from './installments'
 
 export interface Projections {
   daysElapsed: number
@@ -141,4 +142,61 @@ function formatDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+export interface SpendingTransaction {
+  category: string
+  amount: number
+  idrAmount: number | null
+  date: Date
+  installmentTerms: number | null
+}
+
+export interface SpendingTotals {
+  mySpending: number
+  totalSpending: number
+  categoryTotals: Record<string, number>
+}
+
+/**
+ * Calculate spending totals from a list of transactions
+ * Handles installments and category exclusions consistently
+ */
+export function calculateSpendingTotals(
+  transactions: SpendingTransaction[],
+  options: {
+    isCreditCard?: boolean
+    statementDay?: number
+    monthOffset?: number
+    referenceDate?: Date
+  } = {}
+): SpendingTotals {
+  const { isCreditCard = false, statementDay = 1, monthOffset = 0, referenceDate } = options
+  const MY_SPENDING_EXCLUDED: readonly string[] = CONFIG.SPENDING.MY_SPENDING_EXCLUDED
+  const BOTH_EXCLUDED: readonly string[] = CONFIG.SPENDING.BOTH_EXCLUDED
+
+  const categoryTotals: Record<string, number> = {}
+  let mySpending = 0
+  let totalSpending = 0
+
+  for (const tx of transactions) {
+    const amount = tx.idrAmount ?? tx.amount
+    const effectiveAmount = isCreditCard && tx.installmentTerms && tx.installmentTerms > 1
+      ? getEffectiveAmount(amount, tx.installmentTerms, tx.date, statementDay, monthOffset, referenceDate)
+      : amount
+
+    if (effectiveAmount !== 0) {
+      // Add/subtract to total spending if not in BOTH_EXCLUDED
+      if (!BOTH_EXCLUDED.includes(tx.category)) {
+        totalSpending += effectiveAmount
+      }
+      // Add/subtract to my spending and chart if not in MY_SPENDING_EXCLUDED
+      if (!MY_SPENDING_EXCLUDED.includes(tx.category)) {
+        categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + effectiveAmount
+        mySpending += effectiveAmount
+      }
+    }
+  }
+
+  return { mySpending, totalSpending, categoryTotals }
 }

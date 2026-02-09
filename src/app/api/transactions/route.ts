@@ -2,10 +2,9 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { successResponse, errorResponse } from '@/lib/api-utils'
-import { getActiveInstallments, getEffectiveAmount } from '@/lib/installments'
+import { getActiveInstallments } from '@/lib/installments'
+import { calculateSpendingTotals } from '@/lib/spending-calculations'
 import type { ChartData } from '@/types'
-
-const EXCLUDED_CATEGORIES = ['Transfer', 'Credit Card Payment']
 
 // GET /api/transactions - Get transactions with filters
 export async function GET(request: NextRequest) {
@@ -72,44 +71,22 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Calculate category totals for chart (excluding transfers and CC payments)
-    // For installments, use effective amount for the period
-    const categoryTotals: Record<string, number> = {}
-    let total = 0
+    // Combine current transactions with older installment transactions (avoiding duplicates)
+    const allTransactionsForCalculation = [
+      ...transactions,
+      ...allTransactionsForInstallments.filter(tx => !transactions.some(t => t.id === tx.id))
+    ]
 
-    for (const tx of transactions) {
-      if (!EXCLUDED_CATEGORIES.includes(tx.category)) {
-        const amount = tx.idrAmount ?? tx.amount
-        const effectiveAmount = isCreditCard && tx.installmentTerms && tx.installmentTerms > 1
-          ? getEffectiveAmount(amount, tx.installmentTerms, tx.date, statementDay, monthOffset)
-          : amount
-
-        if (effectiveAmount > 0) {
-          categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + effectiveAmount
-          total += effectiveAmount
-        }
-      }
-    }
-
-    // Add installment amounts from older transactions that are still active
-    for (const tx of allTransactionsForInstallments) {
-      // Skip if already in current period transactions
-      if (transactions.some(t => t.id === tx.id)) continue
-      if (EXCLUDED_CATEGORIES.includes(tx.category)) continue
-
-      const amount = tx.idrAmount ?? tx.amount
-      const effectiveAmount = getEffectiveAmount(amount, tx.installmentTerms, tx.date, statementDay, monthOffset)
-
-      if (effectiveAmount > 0) {
-        categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + effectiveAmount
-        total += effectiveAmount
-      }
-    }
+    // Calculate spending totals using shared function
+    const { mySpending, totalSpending, categoryTotals } = calculateSpendingTotals(
+      allTransactionsForCalculation,
+      { isCreditCard, statementDay, monthOffset }
+    )
 
     const chartData: ChartData[] = Object.entries(categoryTotals).map(([name, value]) => ({
       name,
       value,
-      percentage: total > 0 ? Math.round((value / total) * 100) : 0,
+      percentage: mySpending > 0 ? Math.round((value / mySpending) * 100) : 0,
     }))
 
     // Get active installments for display
@@ -131,7 +108,8 @@ export async function GET(request: NextRequest) {
     return successResponse({
       transactions,
       chartData,
-      total,
+      total: mySpending,
+      totalSpending,
       activeInstallments,
     })
   } catch (error) {

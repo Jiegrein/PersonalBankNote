@@ -7,6 +7,19 @@ import { parseTransaction } from '@/lib/parsers'
 import { applyRules, Rule } from '@/lib/rules-engine'
 import { PreviewTransaction } from '@/types'
 
+function sanitizeEmailContent(content: string): string {
+  return content
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 interface PreviewRequestBody {
   bankId: string
   preview: true
@@ -107,8 +120,9 @@ async function handlePreview(
     .filter(email => !existingEmailIds.has(email.id))
     .map((email, index) => {
       const parsed = parseTransaction(bank.parserType, email.content)
-      const textToMatch = `${parsed.merchant} ${email.subject} ${email.content}`
-      const category = applyRules(textToMatch, rules as Rule[], bank.bankType)
+      const sanitizedContent = sanitizeEmailContent(email.content)
+      const textToMatch = `${parsed.merchant} ${email.subject} ${sanitizedContent}`
+      const category = applyRules(textToMatch, rules as Rule[], bank.bankType, parsed.merchant)
 
       return {
         tempId: `preview-${index}-${email.id.slice(0, 8)}`,
@@ -124,8 +138,13 @@ async function handlePreview(
         rawContent: email.content,
       }
     })
-    // Filter out failed transactions (BCA debit with Status: Failed)
-    .filter(tx => tx.transactionType !== 'Failed' && tx.merchant !== 'FAILED_TRANSACTION')
+    // Filter out failed/skipped transactions
+    .filter(tx =>
+      tx.transactionType !== 'Failed' &&
+      tx.transactionType !== 'Skip' &&
+      tx.merchant !== 'FAILED_TRANSACTION' &&
+      tx.merchant !== 'SKIP_TRANSACTION'
+    )
 
   return NextResponse.json({
     success: true,

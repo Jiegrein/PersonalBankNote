@@ -24,6 +24,12 @@ export const CONFIG = {
     STATEMENT_DAY_MAX: 31,
     EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   },
+  SPENDING: {
+    // Categories excluded from "My Spending" but included in "Total Spending"
+    MY_SPENDING_EXCLUDED: ['Transfer', 'Credit Card Payment', 'Self-Transfer', 'Papa Credit Card Payment', 'Papa', 'Bebe'],
+    // Categories excluded from both totals (transfers between own accounts)
+    BOTH_EXCLUDED: ['Transfer', 'Credit Card Payment', 'Self-Transfer', 'Papa Credit Card Payment'],
+  },
 } as const
 
 // Type for valid conditions
